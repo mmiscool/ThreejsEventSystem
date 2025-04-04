@@ -1,14 +1,6 @@
 # ThreeJSeventSystem
 A DOM style event system for threeJS
 
-
-
-
-
-# threeEnvironment.js Documentation
-
-This module provides a 3D environment setup using Three.js, including a `threeEnvironment` class for scene management and an `object_3d` class for creating interactive 3D objects with pointer-based event handling.
-
 ## Table of Contents
 - [Installation](#installation)
 - [Initializing the Environment](#initializing-the-environment)
