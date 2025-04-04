@@ -79,13 +79,244 @@ mesh.position.set(0, 0, 0);
 
 // Create an object_3d instance
 const obj = new object_3d(mesh);
-
-// Add to the scene (if not automatically added via DOM query)
-env.scene.add(mesh);
 ```
 
 - The `mesh` must be a `THREE.Mesh` instance.
 - The constructor attempts to add the mesh to the scene via a DOM query (`document.querySelector('canvas')?.parentElement?.threeEnvironment?.scene`). For reliability, explicitly add it to the scene using `env.scene.add(mesh)`.
+
+
+
+
+
+Below is a Markdown README section specifically documenting the `object_3d` class from the `threeEnvironment.js` file. It includes an overview, constructor details, method descriptions, and examples of usage, focusing on its role in creating interactive 3D objects with event handling capabilities.
+
+
+# object_3d Class
+- [Overview](#overview)
+- [Constructor](#constructor)
+- [Methods](#methods)
+  - [show](#show)
+  - [hide](#hide)
+  - [addEventListener](#addeventlistener)
+  - [removeEventListener](#removeeventlistener)
+  - [callEvent](#callevent)
+  - [setColor](#setcolor)
+- [Properties](#properties)
+- [Usage Example](#usage-example)
+
+## Overview
+
+The `object_3d` class encapsulates a Three.js `Mesh` and adds functionality for:
+- Toggling visibility (`show`/`hide`).
+- Changing the material color (`setColor`).
+- Managing custom events (e.g., `pointerenter`, `pointerover`, etc.) via an event listener system.
+
+
+## Constructor
+
+### `object_3d(mesh)`
+Creates a new `object_3d` instance.
+
+- **Parameters**:
+  - `mesh` (`THREE.Mesh`): The Three.js mesh to wrap. Must be an instance of `THREE.Mesh`.
+- **Throws**:
+  - `Error`: If `mesh` is not a `THREE.Mesh` instance.
+- **Behavior**:
+  - Sets `mesh.userData.object3d` to reference this instance.
+  - Initializes an event listener map.
+  - Attempts to add the mesh to the scene via `document.querySelector('canvas')?.parentElement?.threeEnvironment?.scene`.
+
+#### Example
+```javascript
+import * as THREE from 'three';
+import { object_3d } from './threeEnvironment.js';
+
+const geometry = new THREE.BoxGeometry(20, 20, 20);
+const material = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+const mesh = new THREE.Mesh(geometry, material);
+const obj = new object_3d(mesh);
+```
+
+## Methods
+
+### `show()`
+Makes the mesh visible.
+
+- **Returns**: `void`
+- **Example**:
+  ```javascript
+  obj.show();
+  ```
+
+### `hide()`
+Hides the mesh.
+
+- **Returns**: `void`
+- **Example**:
+  ```javascript
+  obj.hide();
+  ```
+
+### `addEventListener(event, callback)`
+Adds an event listener for a specified event type.
+
+- **Parameters**:
+  - `event` (`string`): The event name (e.g., `'pointerenter'`, `'dragstart'`).
+  - `callback` (`function`): The function to call when the event is triggered.
+- **Throws**:
+  - `Error`: If `event` is not a string or `callback` is not a function.
+- **Example**:
+  ```javascript
+  obj.addEventListener('pointerenter', () => {
+      console.log('Pointer entered');
+      obj.setColor(0xffff00);
+  });
+  ```
+
+### `removeEventListener(event)`
+Removes all listeners for a specified event type.
+
+- **Parameters**:
+  - `event` (`string`): The event name to remove listeners for.
+- **Throws**:
+  - `Error`: If `event` is not a string.
+- **Example**:
+  ```javascript
+  obj.removeEventListener('pointerenter');
+  ```
+
+### `callEvent(event)`
+Triggers all listeners for a specified event type. Typically called internally by `threeEnvironment`.
+
+- **Parameters**:
+  - `event` (`string`): The event name to trigger.
+- **Throws**:
+  - `Error`: If `event` is not a string.
+- **Example**:
+  ```javascript
+  obj.callEvent('pointerenter'); // Manually trigger pointerenter event
+  ```
+
+### `setColor(color)`
+Sets the material color of the mesh.
+
+- **Parameters**:
+  - `color` (`number` | `string` | `THREE.Color`): The color value (e.g., `0xff0000`, `'#ff0000'`, or a `THREE.Color` instance).
+- **Throws**:
+  - `Error`: If the mesh has no material.
+- **Example**:
+  ```javascript
+  obj.setColor(0x00ff00); // Change to green
+  ```
+
+## Properties
+
+- **`mesh`** (`THREE.Mesh`): The underlying Three.js mesh object.
+- **`eventListeners`** (`Map`): A map storing event types and their associated callback sets.
+- **`scene`** (`THREE.Scene` | `null`): The scene the mesh is added to, determined via DOM query during construction.
+
+## Usage Example
+
+Here’s a complete example of creating an `object_3d` instance and attaching event listeners:
+
+```javascript
+import * as THREE from 'three';
+import { threeEnvironment, object_3d } from './threeEnvironment.js';
+
+// Initialize environment
+const container = document.getElementById('container');
+const env = new threeEnvironment(container);
+container.threeEnvironment = env;
+
+// Create a cube
+const geometry = new THREE.BoxGeometry(20, 20, 20);
+const material = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+const mesh = new THREE.Mesh(geometry, material);
+mesh.position.set(0, 0, 0);
+const cube = new object_3d(mesh);
+env.scene.add(mesh); // Explicitly add to scene
+
+// Attach event listeners
+cube.addEventListener('pointerenter', () => {
+    console.log('Pointer entered cube');
+    cube.setColor(0xffff00); // Yellow
+});
+
+cube.addEventListener('pointerover', () => {
+    console.log('Pointer over cube');
+    cube.mesh.scale.set(1.1, 1.1, 1.1); // Enlarge
+});
+
+cube.addEventListener('pointerout', () => {
+    console.log('Pointer left cube');
+    cube.setColor(0xff0000); // Red
+    cube.mesh.scale.set(1, 1, 1); // Reset scale
+});
+
+cube.addEventListener('pointermove', () => {
+    console.log('Pointer moving over cube');
+    cube.mesh.rotation.y += 0.05; // Rotate
+});
+
+cube.addEventListener('pointerdown', () => {
+    console.log('Pointer down on cube');
+    cube.setColor(0xff00ff); // Magenta
+});
+
+cube.addEventListener('pointerup', () => {
+    console.log('Pointer up on cube');
+    cube.setColor(0xff0000); // Red
+});
+
+cube.addEventListener('dblclick', () => {
+    console.log('Cube double-clicked');
+    cube.hide();
+    setTimeout(() => cube.show(), 1000); // Show after 1s
+});
+
+cube.addEventListener('contextmenu', () => {
+    console.log('Context menu on cube');
+    cube.mesh.rotation.x += Math.PI / 2; // Rotate 90 degrees
+});
+
+cube.addEventListener('wheel', (event) => {
+    console.log('Wheel on cube');
+    const delta = event.deltaY > 0 ? -1 : 1;
+    cube.mesh.position.z += delta * 5; // Move z-axis
+});
+
+cube.addEventListener('dragstart', () => {
+    console.log('Drag started on cube');
+    const intersects = env.raycaster.intersectObjects(env.scene.children, true);
+    if (intersects.length > 0) {
+        cube.dragOffset = intersects[0].point.sub(cube.mesh.position);
+    }
+});
+
+cube.addEventListener('drag', () => {
+    console.log('Dragging cube');
+    const intersects = env.raycaster.intersectObjects(env.scene.children, true);
+    if (intersects.length > 0 && cube.dragOffset) {
+        cube.mesh.position.copy(intersects[0].point.sub(cube.dragOffset));
+    }
+});
+
+cube.addEventListener('dragend', () => {
+    console.log('Drag ended on cube');
+    cube.dragOffset = null;
+});
+```
+
+
+
+
+
+
+
+
+
+
+
 
 ## Supported Events
 
