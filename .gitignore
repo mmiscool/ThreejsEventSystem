@@ -1,0 +1,5 @@
+*.aiCoder/llmConfig/*key*
+*.aiCoder/backups/*
+*node_modules/*
+.parcel-cache*
+dist/*
