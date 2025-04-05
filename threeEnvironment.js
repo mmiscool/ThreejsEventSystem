@@ -138,18 +138,55 @@ export class threeEnvironment {
             console.error('Failed to initialize Three.js environment:', error);
         }
     }
+
+    addObject(geometry) {
+        console.log('Adding object:', geometry);
+
+        const object = new object_3d(geometry, this.scene);
+        return object;
+
+    }
+    removeObject(object) {
+        try {
+            if (!(object instanceof object_3d)) {
+                throw new Error('Object must be an instance of object_3d');
+            }
+            this.scene.remove(object.mesh);
+            object.mesh.geometry.dispose();
+            object.mesh.material.dispose();
+            object.mesh = null;
+        } catch (error) {
+            console.error('Failed to remove object:', error);
+        }
+    }
+    listObjects() {
+        try {
+            const objects = [];
+            this.scene.traverse(object => {
+                if (object.userData.object3d) {
+                    objects.push(object.userData.object3d);
+                }
+            });
+            return objects;
+        } catch (error) {
+            console.error('Failed to list objects:', error);
+        }
+    }
 }
 export class object_3d {
-    constructor(mesh) {
+    constructor(geometry, scene) {
+        console.log(scene);
+        console.log(geometry);
         try {
-            if (!(mesh instanceof THREE.Mesh)) {
-                throw new Error('Object must be a THREE.Mesh instance');
+            // teast if geometry is a valid THREE.Geometry or THREE.BufferGeometry
+            if (!geometry.isBufferGeometry && !geometry.isGeometry) {
+                throw new Error('Invalid geometry type');
             }
-            this.mesh = mesh;
+            this.mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color: "red" }));
             this.mesh.userData.object3d = this;
-            // Set the reference to this object_3d instance
             this.eventListeners = new Map();
-            this.scene = document.querySelector('canvas')?.parentElement?.threeEnvironment?.scene;
+            
+            this.scene = scene;
             if (this.scene) {
                 this.scene.add(this.mesh);
             }
@@ -188,7 +225,7 @@ export class object_3d {
                 try {
                     callback.call(this);
                 } catch (callbackError) {
-                    console.error(`Error in ${ event } callback:`, callbackError);
+                    console.error(`Error in ${event} callback:`, callbackError);
                 }
             });
         }
