@@ -14,6 +14,10 @@ window.addEventListener('DOMContentLoaded', () => {
         box.setColor('yellow');
         console.log('Box: pointerenter');
     });
+    box.addEventListener('transform', () => {
+        box.setColor('yellow');
+        console.log('Box: transform');
+    });
     box.addEventListener('pointerover', () => {
         console.log('Box: pointerover');
     });
@@ -76,7 +80,7 @@ window.addEventListener('DOMContentLoaded', () => {
         sphere.mesh.position.x += 0.1;
         // move the sphere along the y-axis
         sphere.mesh.position.y += 0.1;
-        
+
         console.log('Sphere: drag');
     });
 

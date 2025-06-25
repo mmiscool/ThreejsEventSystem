@@ -243,7 +243,7 @@ export class object_3d {
         }
         this._addTransformControls();
     }
-   _addTransformControls() {
+    _addTransformControls() {
         if (!this.scene) {
             throw new Error('Scene is not initialized');
         }
@@ -267,9 +267,10 @@ export class object_3d {
                         object.userData.object3d.transformControls.enabled = false;
                     }
                 });
+                this.callEvent('transform');
             } else {
                 this.threeEnv.controls.enabled = true; // Re-enable trackball controls after dragging
-                                this.threeEnv.scene.traverse(object => {
+                this.threeEnv.scene.traverse(object => {
                     if (object.userData.object3d && object.userData.object3d !== this) {
                         object.userData.object3d.transformControls.enabled = true; // Re-enable transform controls for other objects
                     }
