@@ -18,6 +18,7 @@ export class threeEnvironment {
                 throw new Error('Target element must be an HTMLElement');
             }
             this.scene = new THREE.Scene();
+            this.scene.background = new THREE.Color("black"); // Set background color to black
             this.renderer = new THREE.WebGLRenderer({ antialias: true });
             const width = targetElement.clientWidth;
             const height = targetElement.clientHeight;
@@ -194,7 +195,7 @@ export class threeEnvironment {
 
                 this.scene.traverse(obj => {
                     if (obj.userData.object3d instanceof point_3d) {
-                        console.log('Updating screen scale for point_3d:', obj.userData.object3d);
+                        //console.log('Updating screen scale for point_3d:', obj.userData.object3d);
                         obj.userData.object3d.updateScreenScale();
                     }
                 });
@@ -437,13 +438,23 @@ export class point_3d extends THREE.Object3D {
 
     _setupDragPlaneLogic() {
         this.addEventListener('dragstart', () => {
-            if (this.parent && this.parent.userData.sketchPlane) {
-                const plane = this.parent.userData.sketchPlane.clone();
-                const worldPos = new THREE.Vector3();
-                this.getWorldPosition(worldPos);
-                plane.constant = -plane.normal.dot(worldPos);
-                this.dragPlane = plane;
-            }
+            const parent = this.parent;
+            if (!parent) return;
+
+            parent.updateMatrixWorld(true);
+
+            // Define sketch plane: normal is Z-axis in local sketch space, transformed to world
+            const localZ = new THREE.Vector3(0, 0, 1);
+            const worldNormal = localZ.clone().applyMatrix3(new THREE.Matrix3().getNormalMatrix(parent.matrixWorld)).normalize();
+            const worldOrigin = parent.getWorldPosition(new THREE.Vector3());
+
+            const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(worldNormal, worldOrigin);
+
+            // Project current world position onto the plane to define exact offset
+            const worldPos = this.getWorldPosition(new THREE.Vector3());
+            plane.constant = -plane.normal.dot(worldPos);
+
+            this.dragPlane = plane;
         });
 
         this.addEventListener('drag', () => {
@@ -544,6 +555,25 @@ export class sketch_3d {
 
         this.threeEnv.scene.add(this.transform); // optional: expose transform
 
+
+
+        // === Visual Plane Setup ===
+        this._visualPlane = new THREE.Mesh(
+            new THREE.PlaneGeometry(1, 1),
+            new THREE.MeshBasicMaterial({
+                color: "blue",
+                opacity: 0.1,
+                transparent: true,
+                side: THREE.DoubleSide,
+                depthWrite: true
+            })
+        );
+        this._visualPlane.raycast = () => null; // Prevent raycast interaction
+        this._visualPlane.renderOrder = -1; // Always render behind other objects
+        this.transform.add(this._visualPlane);
+        this._updateVisualPlane();
+
+
         if (Array.isArray(sketchData.points)) {
             sketchData.points.forEach(point => {
                 if (point && 'x' in point && 'y' in point) {
@@ -554,6 +584,14 @@ export class sketch_3d {
             });
         }
     }
+    _updateVisualPlane() {
+        const size = 50; // or whatever fixed size you prefer
+        this._visualPlane.geometry.dispose();
+        this._visualPlane.geometry = new THREE.PlaneGeometry(size, size);
+        this._visualPlane.position.set(0, 0, 0);
+        this._visualPlane.rotation.set(0, 0, 0); // assumes transform handles orientation
+    }
+
 
     addPoint(point = { x: 0, y: 0, id: null }) {
         if (!point.id) {
@@ -571,6 +609,8 @@ export class sketch_3d {
         this.points.push(point);
         this.pointObjects.push(point3D);
         this.transform.add(point3D); // ✅ Add as child to keep transform local
+        //this._updateVisualPlane();
+        point3D.addEventListener('drag', () => this._updateVisualPlane());
     }
 
 
@@ -645,18 +685,14 @@ window.addEventListener('DOMContentLoaded', () => {
     // Create a transform to position the sketch plane in 3D
     const sketchTransform = new THREE.Object3D();
     sketchTransform.position.set(10, 20, 30);
-    sketchTransform.rotation.set(THREE.MathUtils.degToRad(0), THREE.MathUtils.degToRad(0), THREE.MathUtils.degToRad(90));
+    sketchTransform.rotation.set(THREE.MathUtils.degToRad(45), THREE.MathUtils.degToRad(45), THREE.MathUtils.degToRad(0));
 
     // Create the sketch
     const sketch = new sketch_3d({ points: sketchPoints, transform: sketchTransform }, env);
 
-    // Add transform controls for the whole sketch (optional)
-    env.scene.add(sketch.transform);
-    const sketchPlaneHelper = new THREE.AxesHelper(5);
-    sketchPlaneHelper.
-    sketch.transform.add(sketchPlaneHelper);
 
-    //makeBox()
+
+    makeBox()
     // Show all point_3d objects
     sketch.showPoints();
 });
@@ -664,7 +700,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
 function makeBox() {
     //   --- Box ---
-    const boxGeometry = new THREE.BoxGeometry(5, 5, 5);
+    const boxGeometry = new THREE.BoxGeometry(10, 10, 10);
     console.log('BoxGeometry:', boxGeometry);
     const box = env.addObject(boxGeometry);
     box.name = "myBox"; // Set a name for the box object
@@ -731,28 +767,28 @@ function makeBox() {
 
 
 
-    const torus = env.addObject(new THREE.TorusGeometry(10, 4, 16, 100));
-    torus.position.set(20, 0, 0);
-    torus.setColor('magenta');
+    // const torus = env.addObject(new THREE.TorusGeometry(10, 4, 16, 100));
+    // torus.position.set(20, 0, 0);
+    // torus.setColor('magenta');
 
-    torus.addEventListener('wheel', () => {
-        torus.scale.multiplyScalar(1.1);
-        console.log('Torus: wheel');
-    });
-    torus.addEventListener('dblclick', () => {
-        torus.scale.set(1, 1, 1);
-        console.log('Torus: dblclick reset scale');
-    });
+    // torus.addEventListener('wheel', () => {
+    //     torus.scale.multiplyScalar(1.1);
+    //     console.log('Torus: wheel');
+    // });
+    // torus.addEventListener('dblclick', () => {
+    //     torus.scale.set(1, 1, 1);
+    //     console.log('Torus: dblclick reset scale');
+    // });
 
 
-    torus.addEventListener('pointerenter', () => {
-        torus.setColor('yellow');
-        console.log('Point: pointerenter');
-    });
-    torus.addEventListener('pointerout', () => {
-        torus.setColor('red');
-        console.log('Point: pointerout');
-    });
+    // torus.addEventListener('pointerenter', () => {
+    //     torus.setColor('yellow');
+    //     console.log('Point: pointerenter');
+    // });
+    // torus.addEventListener('pointerout', () => {
+    //     torus.setColor('red');
+    //     console.log('Point: pointerout');
+    // });
 
 
 }
