@@ -6,7 +6,10 @@ window.addEventListener('DOMContentLoaded', () => {
     const env = new threeEnvironment(container);
 
     // --- Box ---
-    const box = env.addObject(new THREE.BoxGeometry(20, 20, 20));
+    const boxGeometry = new THREE.BoxGeometry(20, 20, 20);
+    console.log('BoxGeometry:', boxGeometry);
+    const box = env.addObject(boxGeometry);
+    console.log('Box:', box);
     box.mesh.position.set(-60, 0, 0);
     box.setColor('orange');
 

@@ -1,9 +1,6 @@
 
 import * as THREE from 'three';
 import { TrackballControls } from 'three/examples/jsm/controls/TrackballControls.js';
-import { PointerLockedTrackballControls } from './PointerLockedTrackballControls.js';
-import { ArcballControls } from 'three/examples/jsm/Addons.js';
-
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import { object_3d } from './threeEnvironment.js';
 // global variable for the scene
@@ -35,9 +32,10 @@ export class threeEnvironment {
             this.camera.lookAt(0, 0, 0);
             this.renderer.setSize(width, height);
             targetElement.appendChild(this.renderer.domElement);
-            this.controls = new ArcballControls(this.camera, this.renderer.domElement);
-            this.controls.cursorZoom = true; // Enable cursor zoom
-
+            this.controls = new TrackballControls(this.camera, this.renderer.domElement);
+            this.controls.rotateSpeed = 2;
+            this.controls.zoomSpeed = 1.2;
+            this.controls.panSpeed = 4;
             // Initialize raycaster and pointer vector
             this.raycaster = new THREE.Raycaster();
             this.pointer = new THREE.Vector2();
@@ -97,7 +95,6 @@ export class threeEnvironment {
 
             targetElement.addEventListener('pointerdown', event => {
                 try {
-                    if (event.button === 2) return;
                     const intersects = updatePointer(event);
                     if (intersects.length > 0) {
                         const targetObject = intersects[0].object.userData.object3d;
@@ -133,8 +130,7 @@ export class threeEnvironment {
 
                         // Delay re-enabling camera control to avoid jump
                         setTimeout(() => {
-                            //this.controls.handleResize();
-                            console.log(this.controls);
+                            this.controls.handleResize();
                             this.controls.state = -1; // reset state
                             //this.controls._onPointerCancel();
                             this.controls.enabled = true; // re-enable rotation
@@ -190,16 +186,6 @@ export class threeEnvironment {
             const animate = () => {
                 requestAnimationFrame(animate);
                 this.controls.update();
-
-
-                this.scene.traverse(obj => {
-                    if (obj.userData.object3d instanceof point_3d) {
-                        console.log('Updating screen scale for point_3d:', obj.userData.object3d);
-                        obj.userData.object3d.updateScreenScale();
-                    }
-                });
-
-
                 this.renderer.render(this.scene, this.camera);
             };
             animate();
@@ -217,11 +203,7 @@ export class threeEnvironment {
         } catch (error) {
             console.log('Failed to initialize Three.js environment:', error);
         }
-
-
     }
-
-
 
     addObject(geometryOrVector) {
         console.log('Adding object:', geometryOrVector);
@@ -261,6 +243,7 @@ export class threeEnvironment {
     }
 }
 
+import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 
 export class object_3d extends THREE.Mesh {
     constructor(geometry, threeEnv) {
@@ -284,31 +267,51 @@ export class object_3d extends THREE.Mesh {
         this._addTransformControls();
     }
     _addTransformControls() {
-        const controls = new TransformControls(this.threeEnv.camera, this.threeEnv.renderer.domElement);
-        controls.attach(this);
-        controls.visible = false;
+        // We override drag behavior instead of using transform gizmo
+        const plane = new THREE.Plane();
+        const dragPlaneNormal = new THREE.Vector3();
 
-        this.threeEnv.scene.add(controls.getHelper());
-        this.transformControls = controls;
+        this.addEventListener('dragstart', () => {
+            // Get normal from parent sketch's transform (assumed Z axis)
+            const up = new THREE.Vector3(0, 0, 1);
+            this.dragReference = this.position.clone();
 
-        controls.addEventListener('dragging-changed', event => {
-            this.threeEnv.controls.enabled = !event.value;
-
-            if (event.value) {
-                this.callEvent('dragstart');
+            // Sketch should store plane in .transform
+            if (this.parent && this.parent.userData.sketchPlane) {
+                this.sketchPlane = this.parent.userData.sketchPlane;
             } else {
-                this.callEvent('dragend');
+                // fallback: world Z
+                this.updateMatrixWorld(true);
+                const worldMatrix = this.matrixWorld; // ✅ Correct way to get world transform matrix
+
+                dragPlaneNormal.copy(up).applyMatrix4(worldMatrix).normalize();
+                plane.setFromNormalAndCoplanarPoint(dragPlaneNormal, this.position);
+            }
+
+            // Store the current sketch plane
+            this.dragPlane = plane;
+        });
+
+        this.addEventListener('drag', () => {
+            if (!this.dragPlane) return;
+
+            // Calculate intersection of current pointer ray with the plane
+            const ray = this.threeEnv.raycaster.ray;
+            const target = new THREE.Vector3();
+            ray.intersectPlane(this.dragPlane, target);
+
+            if (target) {
+                this.position.copy(target);
             }
         });
 
-        controls.addEventListener('change', () => {
-            this.callEvent('transform');
+        this.addEventListener('dragend', () => {
+            this.dragPlane = null;
         });
 
-        // ❌ DO NOT override drag event handlers here — let callEvent do its job globally
+        // Disable transform controls completely
+        this.transformControls = { visible: false, attach: () => { }, detach: () => { } };
     }
-
-
 
 
     set controls(visible = true) {
@@ -321,7 +324,6 @@ export class object_3d extends THREE.Mesh {
             console.log('Transform controls detached from object:', this.name || 'Unnamed Object');
         }
     }
-
 
     get controls() {
         return this.transformControls.visible;
@@ -397,52 +399,61 @@ export class point_3d extends THREE.Object3D {
 
         this.position.copy(position);
 
-        const radius = 1;
-        const geometry = new THREE.SphereGeometry(radius, 16, 16);
-        const material = new THREE.MeshBasicMaterial({
-            color: 0x00ffff
+        const geometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0)]);
+
+        const size = 64;
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        ctx.beginPath();
+        ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+
+        const texture = new THREE.CanvasTexture(canvas);
+
+        this.material = new THREE.PointsMaterial({
+            color: 0x00ffff,
+            size: 10,
+            sizeAttenuation: false,
+            map: texture,
+            alphaTest: 0.5,
+            transparent: true,
+            depthTest: false
         });
 
-        this.sphereMesh = new THREE.Mesh(geometry, material);
-        this.sphereMesh.userData.object3d = this;
+        this.pointMesh = new THREE.Points(geometry, this.material);
+        this.pointMesh.userData.object3d = this;
 
-        this.add(this.sphereMesh);
+        this.add(this.pointMesh);
         this.scene.add(this);
 
-        // raycast through mesh
-        this.raycast = this.sphereMesh.raycast.bind(this.sphereMesh);
+        // 👇 this makes the wrapper object raycastable
+        this.raycast = this.pointMesh.raycast.bind(this.pointMesh);
 
         this._setupDragPlaneLogic();
         this._setupDummyTransformControls();
     }
 
-    updateScreenScale() {
-        const camera = this.threeEnv.camera;
-        const canvas = this.threeEnv.renderer.domElement;
-
-        const screenHeight = canvas.clientHeight;
-        const baseWorldHeight = camera.top - camera.bottom;
-
-        // Adjust for zoom (orthographic zoom affects world units)
-        const worldHeight = baseWorldHeight / camera.zoom;
-
-        // Compute world units per screen pixel
-        const pixelSize = worldHeight / screenHeight;
-
-        const targetPixelSize = 10; // desired size in screen pixels
-        const worldSize = pixelSize * targetPixelSize;
-
-        this.scale.setScalar(worldSize);
-    }
-
     _setupDragPlaneLogic() {
         this.addEventListener('dragstart', () => {
+            const up = new THREE.Vector3(0, 0, 1);
+            this.dragReference = this.position.clone();
+
+            let planeNormal;
+
             if (this.parent && this.parent.userData.sketchPlane) {
-                const plane = this.parent.userData.sketchPlane.clone();
-                const worldPos = new THREE.Vector3();
-                this.getWorldPosition(worldPos);
-                plane.constant = -plane.normal.dot(worldPos);
-                this.dragPlane = plane;
+                this.dragPlane = this.parent.userData.sketchPlane;
+            } else {
+                if (this.parent && this.parent.userData.sketchPlane) {
+                    this.dragPlane = this.parent.userData.sketchPlane.clone();
+                    this.dragPlane.constant = -this.dragPlane.normal.dot(this.position);
+                } else {
+                    const up = new THREE.Vector3(0, 0, 1);
+                    const normalMatrix = new THREE.Matrix3().getNormalMatrix(this.parent.matrixWorld);
+                    planeNormal = up.clone().applyMatrix3(normalMatrix).normalize();
+                    this.dragPlane = new THREE.Plane().setFromNormalAndCoplanarPoint(planeNormal, this.position);
+                }
             }
         });
 
@@ -453,9 +464,11 @@ export class point_3d extends THREE.Object3D {
             const worldIntersection = new THREE.Vector3();
 
             if (ray.intersectPlane(this.dragPlane, worldIntersection)) {
+                // Convert world point to local space of the parent (e.g., sketch transform)
                 const localIntersection = this.parent.worldToLocal(worldIntersection.clone());
                 this.position.copy(localIntersection);
 
+                // Update linked 2D point if present
                 if (this.userData.source2DPoint) {
                     this.userData.source2DPoint.x = localIntersection.x;
                     this.userData.source2DPoint.y = localIntersection.y;
@@ -467,9 +480,6 @@ export class point_3d extends THREE.Object3D {
             this.dragPlane = null;
         });
     }
-
-
-
 
     _setupDummyTransformControls() {
         this.transformControls = {
@@ -519,7 +529,9 @@ export class point_3d extends THREE.Object3D {
         }
     }
 
-
+    setColor(color) {
+        this.pointMesh.material.color.set(color);
+    }
 }
 
 
@@ -534,12 +546,7 @@ export class sketch_3d {
         this.pointObjects = [];
         this.transform = sketchData.transform || new THREE.Object3D();
 
-        const up = new THREE.Vector3(0, 0, 1);
-        const normalMatrix = new THREE.Matrix3().getNormalMatrix(this.transform.matrixWorld);
-        const normal = up.clone().applyMatrix3(normalMatrix).normalize();
-        const origin = this.transform.getWorldPosition(new THREE.Vector3());
-        const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(normal, origin);
-        this.transform.userData.sketchPlane = plane;
+        this.transform.userData.sketchPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
         this.transform.updateMatrixWorld(true);
 
         this.threeEnv.scene.add(this.transform); // optional: expose transform
@@ -560,19 +567,19 @@ export class sketch_3d {
             point.id = this.generateID();
         }
 
-        // ✅ Directly use local position (Z = 0), no matrix transformation
-        const localPos = new THREE.Vector3(point.x, point.y, 0);
-        const point3D = new point_3d(localPos, this.threeEnv);
+        const pos3D = new THREE.Vector3(point.x, point.y, 0).applyMatrix4(this.transform.matrixWorld);
+        const point3D = new point_3d(pos3D, this.threeEnv);
         point3D.controls = false;
 
+        // 🔁 for bidirectional sync if needed
         point3D.userData.source2DPoint = point;
+        point3D.userData.sourceSketchMatrixWorld = this.transform.matrixWorld;
         point._point3D = point3D;
 
         this.points.push(point);
         this.pointObjects.push(point3D);
-        this.transform.add(point3D); // ✅ Add as child to keep transform local
+        this.transform.attach(point3D); // optional: make point part of transform
     }
-
 
     get points3D() {
         return this.points.map(pt =>
@@ -644,19 +651,18 @@ window.addEventListener('DOMContentLoaded', () => {
 
     // Create a transform to position the sketch plane in 3D
     const sketchTransform = new THREE.Object3D();
-    sketchTransform.position.set(10, 20, 30);
-    sketchTransform.rotation.set(THREE.MathUtils.degToRad(0), THREE.MathUtils.degToRad(0), THREE.MathUtils.degToRad(90));
+    sketchTransform.position.set(0, 0, 0);
+    sketchTransform.rotation.set(THREE.MathUtils.degToRad(45), THREE.MathUtils.degToRad(0), THREE.MathUtils.degToRad(90));
 
     // Create the sketch
     const sketch = new sketch_3d({ points: sketchPoints, transform: sketchTransform }, env);
 
     // Add transform controls for the whole sketch (optional)
     env.scene.add(sketch.transform);
-    const sketchPlaneHelper = new THREE.AxesHelper(5);
-    sketchPlaneHelper.
+    const sketchPlaneHelper = new THREE.AxesHelper(30);
     sketch.transform.add(sketchPlaneHelper);
 
-    //makeBox()
+    makeBox()
     // Show all point_3d objects
     sketch.showPoints();
 });
